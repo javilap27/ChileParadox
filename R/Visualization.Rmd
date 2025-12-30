@@ -7,24 +7,102 @@ output: html_document
 #Pacman will be used to load all necessary packages to access the API's and 
 #necesary data wrangling tools.
 
-install.packages("pacman")
-library(pacman)
-p_load(haven,
-       here,
-       stargazer,
-       summarytools,
-       readxl,
-       dplyr,
-       lubridate,
-       ggplot2,
-       summarytools,
-       devtools,
-       zoo,
-       tidyverse,
-       dataverse,
-       devtools,
-       WDI,
-       wbwdi,
-       readr,
-       wid)
+if (!require("pacman")) install.packages("pacman")
+
+pacman::p_load(
+  tidyverse,    
+  here,         
+  skimr,        
+  modelsummary, 
+  knitr,       
+  kableExtra    
+)
+
+# Load all RDS files
+ECI <- readRDS(here("Input", "ECI.rds"))
+RuleOfLaw <- readRDS(here("Input", "RuleOfLaw.rds"))
+DESTA_depth <- readRDS(here("Input", "DESTA.rds"))
+WDI_data <- readRDS(here("Input", "WDI_data.rds"))
+PWT_hc <- readRDS(here("Input", "PWT_human_capital.rds"))
+
 ```
+
+For the Milestone 1, a table describing the raw data will be presented.
+
+```{r}
+# Function to calculate stats for each variable
+calc_stats <- function(df, var_name, country_col = "Country", year_col = "Year") {
+  list(
+    total_obs = nrow(df),
+    missing_obs = sum(is.na(df[[var_name]])),
+    country_count = n_distinct(df[[country_col]]),
+    year_min = min(df[[year_col]], na.rm = TRUE),
+    year_max = max(df[[year_col]], na.rm = TRUE),
+    min = min(df[[var_name]], na.rm = TRUE),
+    max = max(df[[var_name]], na.rm = TRUE),
+    mean = mean(df[[var_name]], na.rm = TRUE),
+    sd = sd(df[[var_name]], na.rm = TRUE)
+  )
+}
+
+# Calculate statistics for all variables
+stats_eci <- calc_stats(ECI, "ECI", "Country", "Year")
+stats_rol <- calc_stats(RuleOfLaw, "RoL", "country", "year")
+stats_ln_gdp_pc <- calc_stats(WDI_data, "ln_gdp_percap", "country", "year")
+stats_ln_pop <- calc_stats(WDI_data, "ln_pop", "country", "year")
+stats_k <- calc_stats(WDI_data, "K", "country", "year")
+stats_trade <- calc_stats(WDI_data, "trade_openness", "country", "year")
+stats_resources <- calc_stats(WDI_data, "resources", "country", "year")
+stats_fdi <- calc_stats(WDI_data, "FDI", "country", "year")
+stats_l <- calc_stats(PWT_hc, "L", "country", "year")
+
+# Helper function to create row
+create_row <- function(name, stats) {
+  paste0(name, " & ", stats$total_obs, " & ", stats$missing_obs, " & ", 
+         stats$country_count, " & ", stats$year_min, " & ", stats$year_max, " & ",
+         round(stats$min, 3), " & ", round(stats$max, 3), " & ",
+         round(stats$mean, 3), " & ", round(stats$sd, 3), " \\\\\n")
+}
+
+# Create LaTeX table
+latex_table <- paste0(
+  "\\begin{table}[htbp]\n",
+  "\\centering\n",
+  "\\caption{Raw Data Description}\n",
+  "\\label{tab:desc_stats}\n",
+  "\\resizebox{\\textwidth}{!}{%\n",
+  "\\begin{tabular}{lccccccccc}\n",
+  "\\toprule\n",
+  " & \\multicolumn{2}{c}{\\textbf{Observations}} & \\textbf{Countries} & \\multicolumn{2}{c}{\\textbf{Year}} & \\multicolumn{4}{c}{\\textbf{Descriptive Stats}} \\\\\n",
+  " & Total & Missing & Count & Min & Max & Min & Max & Mean & SD \\\\\n",
+  "\\midrule\n",
+  "\\textbf{Dependant Var} & & & & & & & & & \\\\\n",
+  create_row("Exports Complexity Index", stats_eci),
+  "\\midrule\n",
+  "\\textbf{Independent Var} & & & & & & & & & \\\\\n",
+  create_row("Rule of Law Index", stats_rol),
+  "\\midrule\n",
+  "\\textbf{Control Var} & & & & & & & & & \\\\\n",
+  create_row("ln Gross Domestic Product$_{pc}$", stats_ln_gdp_pc),
+  create_row("ln Population", stats_ln_pop),
+  create_row("Gross Capital Creation", stats_k),
+  create_row("Human Capital Index", stats_l),
+  create_row("Trade Openness", stats_trade),
+  create_row("Resource Dependance", stats_resources),
+  create_row("Foreign Direct Investments", stats_fdi),
+  "\\bottomrule\n",
+  "\\end{tabular}%\n",
+  "}%\n",
+  "\\end{table}"
+)
+
+# Print and save
+cat(latex_table)
+
+```
+
+```{r}
+
+```
+
+

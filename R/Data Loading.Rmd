@@ -7,34 +7,178 @@ output: html_document
 #Pacman will be used to load all necessary packages to access the API's and 
 #necesary data wrangling tools.
 
-install.packages("pacman")
-library(pacman)
-p_load(tidyverse,
+if (!require("pacman")) install.packages("pacman")
+
+pacman::p_load(
+       tidyverse,
        readr,
        httr,
-       jsonlite)
+       jsonlite,
+       here,
+       WDI,
+       pwt10)
+
 ```
 
 1.- Economic Complexity Index from the Observatory of Economic Complexity
 
 ```{r}
-# Option 1: Download country-product trade data (HS 2-digit level)
-# This includes the raw data to calculate ECI or download pre-calculated values
-temp_dir <- tempdir()
 
-# Download country-product trade data (HS 2-digit level)
-trade_zip <- file.path(temp_dir, "country_hsproduct2digit_year.csv.zip")
-download.file(
-  url = "https://intl-atlas-downloads.s3.amazonaws.com/country_hsproduct2digit_year.csv.zip",
-  destfile = trade_zip,
-  mode = "wb"
+eci_url <- "https://api-v2.oec.world/tesseract/data.jsonrecords?cube=complexity_eci_a_hs96_hs4&drilldowns=Country+Official,ECI+Rank,Year&measures=ECI&parents=true&locale=en&alias=Country+Official:Country;Continent+Official:Continent"
+
+# Make GET request
+response <- GET(eci_url)
+
+# Check if request was successful
+if (status_code(response) == 200) {
+  
+  # Parse JSON response and save as ECI
+  eci_raw <- fromJSON(content(response, "text", encoding = "UTF-8"))
+  
+  # Convert to tibble and clean
+  ECI <- as_tibble(eci_raw$data) %>%
+    mutate(Year = as.numeric(Year),
+           ECI = as.numeric(ECI),
+           `ECI Rank` = as.numeric(`ECI Rank`)) %>%
+    arrange(Year, `ECI Rank`)
+  
+  # View the structure
+  glimpse(ECI)
+  
+} else {
+  cat("Error: HTTP status code", status_code(response), "\n")
+}
+
+#Save the dataframe for using later
+ saveRDS(ECI, here("Input", "ECI.rds"))
+
+```
+
+2.- The World Bank's World Development Indicators (WDI)
+
+```{r}
+
+# Define all Rule of Law indicator codes
+rl_indicators <- c(
+  "RL.EST",           # Rule of Law: Estimate
+  "RL.PER.RNK",       # Rule of Law: Percentile Rank
+  "RL.PER.RNK.LOWER", # Rule of Law: Percentile Rank, Lower Bound of 90% CI
+  "RL.PER.RNK.UPPER", # Rule of Law: Percentile Rank, Upper Bound of 90% CI
+  "RL.STD.ERR",       # Rule of Law: Standard Error
+  "RL.NO.SRC"         # Rule of Law: Number of Sources
 )
 
-# Unzip and read the data
-unzip(trade_zip, exdir = temp_dir)
-trade_data <- read_csv(file.path(temp_dir, "country_hsproduct2digit_year.csv"))
+# Download data for all countries from 1996 (earliest WGI data) to present
+RuleOfLaw <- WDI(
+  country = "all",
+  indicator = rl_indicators,
+  start = 1996,
+  end = 2024,
+  extra = TRUE
+) %>%
+  rename(
+    RoL = RL.EST,
+    RoL_percentile = RL.PER.RNK,
+    RoL_lower = RL.PER.RNK.LOWER,
+    RoL_upper = RL.PER.RNK.UPPER,
+    RoL_se = RL.STD.ERR,
+    RoL_sources = RL.NO.SRC
+  ) %>%
+  arrange(country, year)
 
 # View structure
-glimpse(trade_data)
+glimpse(RuleOfLaw)
+
+# Save as RDS in Input folder
+saveRDS(RuleOfLaw, here("Input", "RuleOfLaw.rds"))
 ```
+
+3.- The DESTA index for Trade Depth
+
+
+```{r}
+
+desta_indices_url <- "https://www.designoftradeagreements.org/media/filer_public/0c/64/0c64ec71-5728-409f-91d8-64c324bf4400/desta_indices_version_02_03.csv"
+
+# Download the indices data
+DESTA_depth <- read_csv(desta_indices_url)
+
+saveRDS(DESTA_depth, here("Input", "DESTA.rds"))
+```
+
+4.- World Development Indicators
+
+```{r}
+
+wdi_indicators <- c(
+  "NY.GDP.PCAP.KD",      # GDP per capita constant
+  "SP.POP.TOTL",         # Population total
+  "NE.GDI.TOTL.ZS",      # Gross capital formation
+  "NE.TRD.GNFS.ZS",      # Trade openness
+  "NY.GDP.TOTL.RT.ZS",   # Resource rents
+  "BX.KLT.DINV.WD.GD.ZS" # FDI inflows
+)
+
+# Download data for all countries
+WDI_data <- WDI(
+  country = "all",
+  indicator = wdi_indicators,
+  start = 1960,
+  end = 2024,
+  extra = TRUE
+) %>%
+  rename(
+    gdp_pc   = NY.GDP.PCAP.KD,
+    pop        = SP.POP.TOTL,
+    K = NE.GDI.TOTL.ZS,
+    trade_openness    = NE.TRD.GNFS.ZS,
+    resources    = NY.GDP.TOTL.RT.ZS,
+    FDI      = BX.KLT.DINV.WD.GD.ZS
+  ) %>%
+  mutate(
+    # Only take log of positive values, keep NA as NA, set <=0 to NA
+    ln_gdp_percap = if_else(
+      !is.na(gdp_pc) & gdp_pc > 0,
+      log(gdp_pc),
+      NA_real_
+    ),
+    ln_pop = if_else(
+      !is.na(pop) & pop > 0,
+      log(pop),
+      NA_real_
+    )
+  ) %>%
+  arrange(country, year)
+
+
+saveRDS(WDI_data, here("Input", "WDI_data.rds"))
+```
+
+5.- Human Capital Index from the World Penn Table
+
+```{r}
+# Load Penn World Table 10.01 (latest version in the package)
+data("pwt10.01")
+
+# Extract human capital index and relevant variables
+PWT_hc <- pwt10.01 %>%
+  as_tibble() %>%
+  select(
+    country,           # Country name
+    isocode,           # ISO country code
+    year,              # Year
+    hc,               # Human Capital Index
+    pop,               # Population
+    emp                # Employment              
+  ) %>%
+  rename(
+    L = hc,
+    population = pop,
+    employment = emp,
+  ) %>%
+  arrange(country, year)
+
+saveRDS(PWT_hc, here("Input", "PWT_human_capital.rds"))
+```
+
 
