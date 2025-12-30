@@ -3,3 +3,38 @@ title: "Data Loading"
 output: html_document
 ---
 
+```{r}
+#Pacman will be used to load all necessary packages to access the API's and 
+#necesary data wrangling tools.
+
+install.packages("pacman")
+library(pacman)
+p_load(tidyverse,
+       readr,
+       httr,
+       jsonlite)
+```
+
+1.- Economic Complexity Index from the Observatory of Economic Complexity
+
+```{r}
+# Option 1: Download country-product trade data (HS 2-digit level)
+# This includes the raw data to calculate ECI or download pre-calculated values
+temp_dir <- tempdir()
+
+# Download country-product trade data (HS 2-digit level)
+trade_zip <- file.path(temp_dir, "country_hsproduct2digit_year.csv.zip")
+download.file(
+  url = "https://intl-atlas-downloads.s3.amazonaws.com/country_hsproduct2digit_year.csv.zip",
+  destfile = trade_zip,
+  mode = "wb"
+)
+
+# Unzip and read the data
+unzip(trade_zip, exdir = temp_dir)
+trade_data <- read_csv(file.path(temp_dir, "country_hsproduct2digit_year.csv"))
+
+# View structure
+glimpse(trade_data)
+```
+

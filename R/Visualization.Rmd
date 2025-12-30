@@ -3,3 +3,28 @@ title: "Visualization"
 output: html_document
 ---
 
+```{r}
+#Pacman will be used to load all necessary packages to access the API's and 
+#necesary data wrangling tools.
+
+install.packages("pacman")
+library(pacman)
+p_load(haven,
+       here,
+       stargazer,
+       summarytools,
+       readxl,
+       dplyr,
+       lubridate,
+       ggplot2,
+       summarytools,
+       devtools,
+       zoo,
+       tidyverse,
+       dataverse,
+       devtools,
+       WDI,
+       wbwdi,
+       readr,
+       wid)
+```
